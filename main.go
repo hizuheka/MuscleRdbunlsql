@@ -6,6 +6,11 @@ import (
   "github.com/urfave/cli/v2"
 )
 
+type Unlsql struct {
+	sql     string
+	data chan []byte
+}
+
 func main() {
 	var dbname string
 	var sqlF string
@@ -87,15 +92,8 @@ func main() {
 // 	target = "あaかさ1いiき2しうuくす3えeけせ4おoこそ5"
 // )
 
-// type Jef struct {
-// 	fuj90     rune
-// 	fuj2004Ch chan rune
-// }
 
-// func convert(r rune, conmap map[rune]rune) rune {
-// 	//fmt.Printf("[%#U]:start\n", r)
-
-// 	res := r
+func rdbunlsql(sql string, path string) error {
 // 	if r > unicode.MaxASCII {
 // 		if v, ok := conmap[r]; ok {
 // 			res = v
@@ -104,8 +102,8 @@ func main() {
 // 	}
 
 // 	//fmt.Printf("[%#U]:end\n", r)
-// 	return res
-// }
+	return nil
+}
 
 // func genConvertMap(r io.Reader) (map[rune]rune, error) {
 // 	m := make(map[rune]rune)
@@ -163,18 +161,25 @@ func gen(r io.Reader, sql string) (<-chan Unlsql) {
 	return out
 }
 
-// // ワーカー
-// func worker(i int, src <-chan Jef, conmap map[rune]rune, wg *sync.WaitGroup) {
-// 	defer wg.Done()
-// 	// タスクがなくなってタスクのチェネルがcloseされるまで無限ループ
-// 	for j := range src {
+// ワーカー
+func worker(i int, src <-chan Unlsql, wg *sync.WaitGroup) error {
+	defer wg.Done()
+	// タスクがなくなってタスクのチェネルがcloseされるまで無限ループ
+	for s := range src {
+		out, err := filepath.Abs(fmt.Sprintf("./data_%d", i)
+		if err != nil {
+			return err
+		}
 // 		fmt.Printf("goroutin #%d [%#U]: conv start\n", i, j.fuj90)
+		if err := rdbunlsql(s.sql, out) {
+			return err
+		}
 // 		cr := convert(j.fuj90, conmap)
 // 		//fmt.Printf("%#U", cr)
 // 		j.fuj2004Ch <- cr
 // 		fmt.Printf("goroutin #%d [%#U]: conv end\n", i, j.fuj90)
-// 	}
-// }
+	}
+}
 
 // // 順番に従ってに書き出しをする(goroutineで実行される)
 // func writeInOrder(convChs <-chan chan rune, w io.Writer, done chan<- struct{}) error {

@@ -134,32 +134,34 @@ func main() {
 // 	return m, nil
 // }
 
-// func gen(r io.Reader) (<-chan Jef, error) {
-// 	out := make(chan Jef, 50)
+func gen(r io.Reader, sql string) (<-chan Unlsql) {
+	out := make(chan string, 50)
 
-// 	go func(br *bufio.Reader) {
-// 		defer close(out)
-// 		for {
-// 			ru, _, err := br.ReadRune()
-// 			if err == io.EOF {
-// 				//close(out)
-// 				break
-// 			}
-// 			if err != nil {
-// 				break
-// 				//return err
-// 			}
-// 			//out <- Jef{ru, make(chan rune, 1)}
-// 			select {
-// 			case out <- Jef{ru, make(chan rune, 1)}:
-// 			default:
-// 				fmt.Println("入力ファイル用チャネルのバッファが不足しています.")
-// 			}
-// 		}
-// 	}(bufio.NewReader(r))
+	go func(br *bufio.Reader) {
+		defer close(out)
+		scanner := bufio.NewScanner(br)
+		for scanner.Scan() {
+			// sql 内のパラメタを置換する。パラメタは $1, $2 …の形式
+			ary := strings.Split(s.Text(), ",")
+			var s string
+			for i, v := range ary {
+				s = strings.Replace(sql, fmt.Sprintf("$%d", i), v, -1)
+			}
+		}
+		select {
+		case out <- Unlsql{s, make(chan []byte, 1)}:
+		default:
+			fmt.Println("入力ファイル用チャネルのバッファが不足しています.")
+		}
+		if scanner.Err() != nil {
+			// non-EOF error.
+			return nil, scanner.Err()
+		}
+		}
+	}(bufio.NewReader(br))
 
-// 	return out, nil
-// }
+	return out
+}
 
 // // ワーカー
 // func worker(i int, src <-chan Jef, conmap map[rune]rune, wg *sync.WaitGroup) {

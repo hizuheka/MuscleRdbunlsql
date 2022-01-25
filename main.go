@@ -8,7 +8,7 @@ import (
 
 type Unlsql struct {
 	sql     string
-	data chan []byte
+	dataCh chan []byte
 }
 
 func main() {
@@ -162,22 +162,25 @@ func gen(r io.Reader, sql string) (<-chan Unlsql) {
 }
 
 // ワーカー
-func worker(i int, src <-chan Unlsql, wg *sync.WaitGroup) error {
+func worker(i int, src <-chan Unlsql, errCh chan error, wg *sync.WaitGroup) {
 	defer wg.Done()
 	// タスクがなくなってタスクのチェネルがcloseされるまで無限ループ
 	for s := range src {
 		out, err := filepath.Abs(fmt.Sprintf("./data_%d", i)
 		if err != nil {
-			return err
+			errCh <- err
+			return
 		}
-// 		fmt.Printf("goroutin #%d [%#U]: conv start\n", i, j.fuj90)
 		if err := rdbunlsql(s.sql, out) {
-			return err
+			errCh <- err
+			return
 		}
-// 		cr := convert(j.fuj90, conmap)
-// 		//fmt.Printf("%#U", cr)
-// 		j.fuj2004Ch <- cr
-// 		fmt.Printf("goroutin #%d [%#U]: conv end\n", i, j.fuj90)
+		bytes, err := ioutil.ReadFile(out)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		s.dataCh <- bytes
 	}
 }
 

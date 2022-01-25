@@ -87,21 +87,12 @@ func main() {
 	}
 }
 
-// const (
-// 	conmap = "あ,Ａ\nい,Ｉ\nう,Ｕ\nえ,Ｅ\nお,О\n"
-// 	target = "あaかさ1いiき2しうuくす3えeけせ4おoこそ5"
-// )
+func rdbunlsql(db string, sql string, path string) error {
+	out, err  := exec.Command("rdbunlsql", "-d", db, "-s", sql, "-t", path).CombinedOutput();
+	if err != nil {
+		return fmt.Errorf("failed to rdbunlsql: %w, msg: %s", err, out)
+	}
 
-
-func rdbunlsql(sql string, path string) error {
-// 	if r > unicode.MaxASCII {
-// 		if v, ok := conmap[r]; ok {
-// 			res = v
-// 			time.Sleep(time.Duration(rand.Intn(5)) * time.Second) // 5秒までランダムに待つ
-// 		}
-// 	}
-
-// 	//fmt.Printf("[%#U]:end\n", r)
 	return nil
 }
 
@@ -162,7 +153,7 @@ func gen(r io.Reader, sql string) (<-chan Unlsql) {
 }
 
 // ワーカー
-func worker(i int, src <-chan Unlsql, errCh chan error, wg *sync.WaitGroup) {
+func worker(i int, db string, src <-chan Unlsql, errCh chan error, wg *sync.WaitGroup) {
 	defer wg.Done()
 	// タスクがなくなってタスクのチェネルがcloseされるまで無限ループ
 	for s := range src {
@@ -171,7 +162,7 @@ func worker(i int, src <-chan Unlsql, errCh chan error, wg *sync.WaitGroup) {
 			errCh <- err
 			return
 		}
-		if err := rdbunlsql(s.sql, out) {
+		if err := rdbunlsql(db, s.sql, out) {
 			errCh <- err
 			return
 		}
@@ -184,27 +175,26 @@ func worker(i int, src <-chan Unlsql, errCh chan error, wg *sync.WaitGroup) {
 	}
 }
 
-// // 順番に従ってに書き出しをする(goroutineで実行される)
-// func writeInOrder(convChs <-chan chan rune, w io.Writer, done chan<- struct{}) error {
-// 	bw := bufio.NewWriter(w)
-// 	defer bw.Flush()
+// 順番に従ってに書き出しをする(goroutineで実行される)
+func writeInOrder(dataChs <-chan chan []byte, w io.Writer, done chan<- struct{}) error {
+	bw := bufio.NewWriter(w)
+	defer bw.Flush()
 
-// 	// 書き出し完了を表すチャネルをクローズする
-// 	defer close(done)
+	// 書き出し完了を表すチャネルをクローズする
+	defer close(done)
 
-// 	// 順番に取り出す
-// 	for convCh := range convChs {
-// 		// 選択された仕事が終わるまで待つ
-// 		r := <-convCh
-// 		fmt.Printf("writeInOrder:%#U\n", r)
-// 		if _, err := bw.WriteRune(r); err != nil {
-// 			return err
-// 		}
-// 		close(convCh)
-// 	}
+	// 順番に取り出す
+	for dataCh := range dataChs {
+		// 選択された仕事が終わるまで待つ
+		data := <-dataCh
+		if _, err := bw.Write(data); err != nil {
+			return err
+		}
+		close(dataCh)
+	}
 
-// 	return nil
-// }
+	return nil
+}
 
 // // チャネル src から受信した変換対象文字を、変換用ハッシュマップ conmap を使用して変換する。
 // // 変換処理はWorkersパターンを使用するが、チャネル src の順番を w に出力するために、

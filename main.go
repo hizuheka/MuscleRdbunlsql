@@ -78,6 +78,44 @@ func main() {
 			// fmt.Fprintf(c.App.Writer, "%d", ec.ExitCode())
 			// fmt.Printf("made it!\n")
 			// return ec
+
+			// チャネル src から受信した rdbunlsql の実行に必要な情報を基に、rdbunlsql を実行する。
+			// rdbunlsql の実行は Workers パターンを使用するが、チャネル src の順番で w に出力する
+			// ために、バッファありチャネル dataChs を使用する。
+
+			// rdbunlsql の実行結果を直列化して書き出すためのチャネル
+			dataChs := make(chan chan []byte, 50)
+			// 実行対象の rdbunlsql 情報をためるチャネル
+			unlsqls := make(chan Unlsql, 50)
+
+			// rdbunlsql実行結果を直列化して書き出す専用のゴルーチン
+			done := make(chan struct{})
+			go writeInOrder(dataChs, w, done)
+
+			// CPU数に応じたワーカーを生成
+			// ワーカーの数をCPU数の半分にしているのは、CPU数の半分の方が処理速度が早いと書いてある
+			// サイトがあったから
+			var wg sync.WaitGroup
+			for i := 0; i < runtime.NumCPU()/2; i++ {
+				wg.Add(1)
+				go worker(i+1, unlsqls, errCh, &wg)
+			}
+
+			// src から受信したrdbunlsql情報を、ワーカーに渡すためのチャネル unlsqls と dataChs に
+			// 格納していく。
+			go func() {
+				for u := range src {
+					dataChs <- u.dataCh
+					unlsqls <- u
+				}
+				close(dataChs)
+				close(unlsqls)
+			}()
+
+			wg.Wait()
+
+			<-done
+
 		},
 	}
 
@@ -195,42 +233,6 @@ func writeInOrder(dataChs <-chan chan []byte, w io.Writer, done chan<- struct{})
 
 	return nil
 }
-
-// // チャネル src から受信した変換対象文字を、変換用ハッシュマップ conmap を使用して変換する。
-// // 変換処理はWorkersパターンを使用するが、チャネル src の順番を w に出力するために、
-// // バッファありチャネル convChs を使用する。
-// func processSession(src <-chan Jef, conmap map[rune]rune, w io.Writer) {
-// 	// 変換結果を直列化して書き出すためのチャネル
-// 	convChs := make(chan chan rune, 50)
-// 	// 変換対象の文字をためるチャネル
-// 	runes := make(chan Jef, 50)
-
-// 	// 変換結果を直列化して書き出す専用のゴルーチン
-// 	done := make(chan struct{})
-// 	go writeInOrder(convChs, w, done)
-
-// 	// CPU数に応じたワーカーを生成
-// 	// ワーカーの数をCPU数の半分にしているのは、CPU数の半分の方が処理速度が早いと書いてあるサイトがあったから
-// 	var wg sync.WaitGroup
-// 	for i := 0; i < runtime.NumCPU()/2; i++ {
-// 		wg.Add(1)
-// 		go worker(i+1, runes, conmap, &wg)
-// 	}
-
-// 	// src から受信した変換対象文字を、ワーカーに渡すためのチャネル runes と convChs に格納していく。
-// 	go func() {
-// 		for r := range src {
-// 			convChs <- r.fuj2004Ch
-// 			runes <- r
-// 		}
-// 		close(convChs)
-// 		close(runes)
-// 	}()
-
-// 	wg.Wait()
-
-// 	<-done
-// }
 
 // func main() {
 // 	fmt.Printf("runtime.NumCPU()=%d\n", runtime.NumCPU())
